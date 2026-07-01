@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>서명 동영상</title>
+<style>
+  :root{
+    --accent:#ff3b5c;
+    --bg:#000;
+    --panel:rgba(20,20,22,.72);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    color:#fff;user-select:none;-webkit-user-select:none;touch-action:none;}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  video{display:none;}
+  #canvas{position:absolute;inset:0;width:100%;height:100%;background:#111;}
+  /* 드로잉 캡처용 투명 레이어 */
+  #draw{position:absolute;inset:0;width:100%;height:100%;z-index:2;}
+ 
+  /* 시작 오버레이 */
+  #start{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;text-align:center;padding:28px;
+    background:radial-gradient(120% 90% at 50% 0%,#241018 0%,#000 70%);}
+  #start h1{font-size:26px;margin:0;font-weight:800;letter-spacing:-.5px;}
+  #start p{margin:0;color:#bdbdc2;font-size:15px;line-height:1.6;max-width:320px;}
+  .bigbtn{border:none;border-radius:999px;background:var(--accent);color:#fff;
+    font-size:18px;font-weight:700;padding:16px 34px;box-shadow:0 8px 24px rgba(255,59,92,.4);}
+  .bigbtn:active{transform:scale(.96);}
+ 
+  /* 상단 바 */
+  #topbar{position:absolute;top:0;left:0;right:0;z-index:6;display:flex;
+    justify-content:space-between;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;
+    background:linear-gradient(#000a,transparent);}
+  .iconbtn{width:44px;height:44px;border-radius:50%;border:none;background:var(--panel);
+    color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;
+    backdrop-filter:blur(8px);}
+  .iconbtn:active{transform:scale(.92);}
+  #timer{background:rgba(0,0,0,.5);padding:7px 14px;border-radius:999px;font-size:14px;
+    font-weight:600;display:none;align-items:center;gap:8px;}
+  #timer .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
+    animation:blink 1s infinite;}
+  @keyframes blink{50%{opacity:.2}}
+ 
+  /* 도구 바 */
+  #tools{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 118px);
+    z-index:6;display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .row{display:flex;align-items:center;gap:10px;background:var(--panel);
+    padding:9px 12px;border-radius:999px;backdrop-filter:blur(10px);}
+  .swatch{width:30px;height:30px;border-radius:50%;border:2px solid #fff3;padding:0;}
+  .swatch.active{border-color:#fff;transform:scale(1.15);box-shadow:0 0 0 2px #000;}
+  .toolbtn{border:none;background:transparent;color:#fff;font-size:18px;width:38px;height:38px;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;}
+  .toolbtn.active{background:#fff;color:#000;}
+  .toolbtn:active{transform:scale(.9);}
+  #sizeRow input{width:130px;accent-color:var(--accent);}
+  #sizeRow .preview{width:26px;height:26px;display:flex;align-items:center;justify-content:center;}
+  #sizeRow .preview i{display:block;background:#fff;border-radius:50%;}
+ 
+  /* 하단 녹화 컨트롤 */
+  #bottom{position:absolute;left:0;right:0;bottom:0;z-index:6;
+    padding:16px 24px calc(env(safe-area-inset-bottom) + 22px);
+    display:flex;align-items:center;justify-content:space-between;
+    background:linear-gradient(transparent,#000b);}
+  #recBtn{width:78px;height:78px;border-radius:50%;background:transparent;
+    border:5px solid #fff;display:flex;align-items:center;justify-content:center;margin:0 auto;}
+  #recBtn .inner{width:60px;height:60px;border-radius:50%;background:var(--accent);
+    transition:.18s;}
+  #recBtn.recording .inner{width:32px;height:32px;border-radius:9px;}
+  #recBtn:active{transform:scale(.94);}
+  .sidebtn{width:56px;height:56px;border-radius:14px;border:none;background:var(--panel);
+    color:#fff;font-size:12px;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:3px;backdrop-filter:blur(8px);}
+  .sidebtn span{font-size:22px;line-height:1;}
+  .sidebtn:disabled{opacity:.35;}
+  .sidebtn:active{transform:scale(.92);}
+  #sideSpacer{width:56px;}
+ 
+  /* 결과 화면 */
+  #result{position:fixed;inset:0;z-index:60;background:#000;display:none;
+    flex-direction:column;}
+  #result video{display:block;width:100%;flex:1;min-height:0;object-fit:contain;background:#000;}
+  #resultBar{display:flex;gap:12px;padding:16px 18px calc(env(safe-area-inset-bottom) + 20px);}
+  #resultBar button{flex:1;border:none;border-radius:14px;padding:15px;font-size:16px;
+    font-weight:700;color:#fff;}
+  #retake{background:#2a2a2e;}
+  #save{background:var(--accent);}
+  #resultBar button:active{transform:scale(.97);}
+ 
+  #toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:80;
+    background:#000d;color:#fff;padding:11px 18px;border-radius:12px;font-size:14px;
+    opacity:0;transition:.25s;pointer-events:none;max-width:86%;text-align:center;}
+  #toast.show{opacity:1;}
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+ 
+<div id="stage">
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="canvas"></canvas>
+  <canvas id="draw"></canvas>
+</div>
+ 
+<!-- 상단 -->
+<div id="topbar" class="hidden">
+  <button id="flipBtn" class="iconbtn" title="카메라 전환">🔄</button>
+  <div id="timer"><span class="dot"></span><span id="timeText">0:00</span></div>
+  <button id="micBtn" class="iconbtn" title="소리">🎙️</button>
+</div>
+ 
+<!-- 도구 -->
+<div id="tools" class="hidden">
+  <div class="row" id="sizeRow">
+    <div class="preview"><i id="sizeDot" style="width:8px;height:8px"></i></div>
+    <input id="size" type="range" min="2" max="28" value="8">
+    <button class="toolbtn" id="eraser" title="지우개">🧽</button>
+    <button class="toolbtn" id="undo" title="되돌리기">↩️</button>
+    <button class="toolbtn" id="clear" title="전체 지우기">🗑️</button>
+  </div>
+  <div class="row" id="colorRow"></div>
+</div>
+ 
+<!-- 하단 -->
+<div id="bottom" class="hidden">
+  <div id="sideSpacer"></div>
+  <button id="recBtn"><div class="inner"></div></button>
+  <button id="sideSpacer2" class="sidebtn" style="visibility:hidden">.</button>
+</div>
+ 
+<!-- 시작 -->
+<div id="start">
+  <h1>서명 동영상 📹✍️</h1>
+  <p>셀카를 찍으면서 화면 위에 서명을 그리면, 서명이 그려지는 과정까지 소리와 함께 그대로 녹화돼요.</p>
+  <button id="startBtn" class="bigbtn">카메라 시작</button>
+  <p style="font-size:12px;color:#7a7a80">시작을 누르면 카메라·마이크 사용을 허용해 주세요.</p>
+</div>
+ 
+<!-- 결과 -->
+<div id="result">
+  <video id="playback" playsinline controls></video>
+  <div id="resultBar">
+    <button id="retake">다시 찍기</button>
+    <button id="save">저장 / 공유</button>
+  </div>
+</div>
+ 
+<div id="toast"></div>
+ 
+<script>
+const $ = s => document.querySelector(s);
+const video = $('#video');
+const canvas = $('#canvas');       // 합성(카메라+서명) 캔버스 — 이걸 녹화
+const ctx = canvas.getContext('2d');
+const draw = $('#draw');           // 터치 입력 캡처 레이어(투명)
+const ink = document.createElement('canvas');  // 서명 잉크 전용 오프스크린
+const ictx = ink.getContext('2d');
+ 
+const COLORS = ['#ffffff','#000000','#ff3b5c','#ffd400','#2dd4bf','#3b82f6'];
+let penColor = '#ffffff';
+let penSize = 8;
+let erasing = false;
+let facing = 'user';
+let audioOn = true;
+ 
+let stream = null, audioStream = null;
+let strokes = [];          // 완성된 획들
+let current = null;        // 그리는 중인 획
+let vw = 0, vh = 0;        // 카메라 원본 해상도
+let running = false;
+ 
+let recorder = null, chunks = [], recording = false, recStart = 0, timerInt = null;
+let lastBlob = null;
+ 
+/* ---------- 카메라 시작 ---------- */
+async function startCamera(){
+  stopTracks();
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode: facing, width:{ideal:1280}, height:{ideal:720} },
+      audio: audioOn
+    });
+  }catch(e){
+    // 오디오 실패 시 영상만이라도
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode: facing }, audio:false });
+      audioOn = false; updateMicBtn();
+      toast('마이크 없이 시작합니다');
+    }catch(err){
+      toast('카메라를 열 수 없어요: '+(err.message||err.name)); return;
+    }
+  }
+  video.srcObject = stream;
+  await video.play().catch(()=>{});
+  video.onloadedmetadata = ()=>{ vw = video.videoWidth; vh = video.videoHeight; };
+  vw = video.videoWidth||1280; vh = video.videoHeight||720;
+ 
+  $('#start').classList.add('hidden');
+  $('#topbar').classList.remove('hidden');
+  $('#tools').classList.remove('hidden');
+  $('#bottom').classList.remove('hidden');
+ 
+  running = true;
+  resize();
+  requestAnimationFrame(loop);
+}
+ 
+function stopTracks(){ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }
+ 
+/* ---------- 캔버스 크기(화면 = 캔버스 픽셀) ---------- */
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  const w = Math.round(window.innerWidth * dpr);
+  const h = Math.round(window.innerHeight * dpr);
+  canvas.width = w; canvas.height = h;
+  draw.width = w; draw.height = h;
+  ink.width = w; ink.height = h;
+  renderInk();
+}
+window.addEventListener('resize', ()=>{ if(!recording) resize(); });
+window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if(!recording) resize(); }, 300); });
+ 
+/* ---------- 매 프레임: 카메라(cover) + 서명 그리기 ---------- */
+function loop(){
+  if(!running) return;
+  const cw = canvas.width, ch = canvas.height;
+  if(vw && vh && video.readyState>=2){
+    // cover 크롭 계산
+    const scale = Math.max(cw/vw, ch/vh);
+    const dw = vw*scale, dh = vh*scale;
+    const dx = (cw-dw)/2, dy = (ch-dh)/2;
+    ctx.save();
+    if(facing==='user'){ ctx.translate(cw,0); ctx.scale(-1,1); }  // 셀카 미러
+    ctx.drawImage(video, dx, dy, dw, dh);
+    ctx.restore();
+  }else{
+    ctx.fillStyle='#111'; ctx.fillRect(0,0,cw,ch);
+  }
+  // 서명 잉크 레이어를 영상 위에 합성(녹화에 포함)
+  ctx.drawImage(ink, 0, 0);
+  requestAnimationFrame(loop);
+}
+ 
+// 잉크 전용 캔버스에 모든 획을 다시 그림(지우개는 잉크만 제거)
+function renderInk(){
+  const c=ictx;
+  c.clearRect(0,0,ink.width,ink.height);
+  c.lineCap='round'; c.lineJoin='round';
+  const all = current ? strokes.concat([current]) : strokes;
+  for(const s of all){
+    if(s.pts.length<1) continue;
+    c.beginPath();
+    c.globalCompositeOperation = s.erase ? 'destination-out' : 'source-over';
+    c.strokeStyle = s.color; c.fillStyle = s.color; c.lineWidth = s.size;
+    const p=s.pts;
+    if(p.length===1){ c.arc(p[0].x,p[0].y,s.size/2,0,Math.PI*2); c.fill(); }
+    else{
+      c.moveTo(p[0].x,p[0].y);
+      for(let i=1;i<p.length-1;i++){
+        const mx=(p[i].x+p[i+1].x)/2, my=(p[i].y+p[i+1].y)/2;
+        c.quadraticCurveTo(p[i].x,p[i].y,mx,my);
+      }
+      c.lineTo(p[p.length-1].x,p[p.length-1].y);
+      c.stroke();
+    }
+  }
+  c.globalCompositeOperation='source-over';
+}
+ 
+/* ---------- 포인터(터치/마우스) ---------- */
+function posFromEvent(e){
+  const r = draw.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  const sx = draw.width / r.width, sy = draw.height / r.height;
+  return { x:(t.clientX-r.left)*sx, y:(t.clientY-r.top)*sy };
+}
+function startStroke(e){
+  e.preventDefault();
+  current = { color:penColor, size:penSize*(Math.min(window.devicePixelRatio||1,2)), erase:erasing, pts:[posFromEvent(e)] };
+  renderInk();
+}
+function moveStroke(e){
+  if(!current) return;
+  e.preventDefault();
+  current.pts.push(posFromEvent(e));
+  renderInk();
+}
+function endStroke(){
+  if(!current) return;
+  strokes.push(current); current=null; renderInk();
+}
+draw.addEventListener('touchstart', startStroke, {passive:false});
+draw.addEventListener('touchmove', moveStroke, {passive:false});
+draw.addEventListener('touchend', endStroke);
+draw.addEventListener('touchcancel', endStroke);
+draw.addEventListener('mousedown', startStroke);
+window.addEventListener('mousemove', e=>{ if(current) moveStroke(e); });
+window.addEventListener('mouseup', endStroke);
+ 
+/* ---------- 도구 UI ---------- */
+const colorRow = $('#colorRow');
+COLORS.forEach((c,i)=>{
+  const b=document.createElement('button');
+  b.className='swatch'+(c===penColor?' active':'');
+  b.style.background=c;
+  b.onclick=()=>{ penColor=c; erasing=false; $('#eraser').classList.remove('active');
+    document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+    b.classList.add('active'); };
+  colorRow.appendChild(b);
+});
+const sizeInput=$('#size'), sizeDot=$('#sizeDot');
+function updSizeDot(){ const d=Math.max(6,Math.min(26,penSize)); sizeDot.style.width=d+'px'; sizeDot.style.height=d+'px'; }
+sizeInput.oninput=()=>{ penSize=+sizeInput.value; updSizeDot(); }; updSizeDot();
+$('#eraser').onclick=function(){ erasing=!erasing; this.classList.toggle('active',erasing); };
+$('#undo').onclick=()=>{ strokes.pop(); renderInk(); };
+$('#clear').onclick=()=>{ strokes=[]; current=null; renderInk(); };
+ 
+/* ---------- 카메라 전환 / 마이크 ---------- */
+$('#flipBtn').onclick=async ()=>{
+  if(recording){ toast('녹화 중에는 전환할 수 없어요'); return; }
+  facing = facing==='user' ? 'environment' : 'user';
+  await startCamera();
+};
+function updateMicBtn(){ $('#micBtn').textContent = audioOn?'🎙️':'🔇'; $('#micBtn').style.opacity=audioOn?1:.5; }
+$('#micBtn').onclick=async ()=>{
+  if(recording){ toast('녹화 중에는 바꿀 수 없어요'); return; }
+  audioOn=!audioOn; updateMicBtn(); await startCamera();
+};
+ 
+/* ---------- 녹화 ---------- */
+function pickMime(){
+  const opts=['video/mp4;codecs=avc1','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  for(const m of opts){ if(window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }
+  return '';
+}
+function startRec(){
+  if(!canvas.captureStream){ toast('이 브라우저는 화면 녹화를 지원하지 않아요'); return; }
+  const cstream = canvas.captureStream(30);
+  if(audioOn && stream){
+    const a=stream.getAudioTracks();
+    if(a[0]) cstream.addTrack(a[0]);
+  }
+  const mime=pickMime();
+  try{ recorder = mime ? new MediaRecorder(cstream,{mimeType:mime,videoBitsPerSecond:6_000_000})
+                       : new MediaRecorder(cstream); }
+  catch(e){ toast('녹화 시작 실패: '+e.message); return; }
+  chunks=[];
+  recorder.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  recorder.onstop=finishRec;
+  recorder.start();
+  recording=true;
+  $('#recBtn').classList.add('recording');
+  $('#timer').style.display='flex';
+  recStart=Date.now();
+  timerInt=setInterval(()=>{ const s=Math.floor((Date.now()-recStart)/1000);
+    $('#timeText').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); },250);
+}
+function stopRec(){
+  if(recorder && recording){ recording=false; recorder.stop();
+    $('#recBtn').classList.remove('recording'); $('#timer').style.display='none';
+    clearInterval(timerInt);
+  }
+}
+function finishRec(){
+  const type = recorder.mimeType || (chunks[0]&&chunks[0].type) || 'video/webm';
+  lastBlob = new Blob(chunks, {type});
+  const url = URL.createObjectURL(lastBlob);
+  $('#playback').src=url;
+  $('#result').style.display='flex';
+}
+$('#recBtn').onclick=()=> recording ? stopRec() : startRec();
+ 
+/* ---------- 결과 화면 ---------- */
+$('#retake').onclick=()=>{ $('#result').style.display='none'; if(lastBlob){ URL.revokeObjectURL($('#playback').src);} };
+$('#save').onclick=async ()=>{
+  if(!lastBlob) return;
+  const ext = lastBlob.type.includes('mp4')?'mp4':'webm';
+  const file = new File([lastBlob], `서명동영상_${stamp()}.${ext}`, {type:lastBlob.type});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:'서명 동영상'}); return; }catch(e){}
+  }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(lastBlob); a.download=file.name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast('저장됨');
+};
+function stamp(){ const d=new Date(),p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
+ 
+/* ---------- 기타 ---------- */
+let toastT;
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
+ 
+$('#startBtn').onclick=startCamera;
+updateMicBtn();
+</script>
+</body>
+</html>
